@@ -2,13 +2,29 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-import json, logging, os
+import json, logging, os, re
 from pymongo import MongoClient , errors
+
+logger = logging.getLogger(__name__)
 
 mongo_uri = 'mongodb://' + os.environ["MONGO_HOST"] + ':' + os.environ["MONGO_PORT"]
 db = MongoClient(mongo_uri)['test_db']
 todos_collection = db["todos"]
+def validate_task(task: str):
+    if not isinstance(task, str):
+        return "Task must be a string"
 
+    task = task.strip()
+
+    if len(task) == 0:
+        return "Task cannot be empty"
+
+    if len(task) > 200:
+        return "Task must be under 200 characters"
+    if re.search(r"[<>;$]", task):
+        return "Task contains invalid characters"
+
+    return None
 class TodoListView(APIView):
 
     def get(self, request):
@@ -32,14 +48,16 @@ class TodoListView(APIView):
     def post(self, request):
         # Implement this method - accept a todo item in a mongo collection, persist it using db instance above.
         try:
-            task = request.data.get("task", "").strip()
-            if not task:
+            task = request.data.get("task", "")
+
+            validation_error = validate_task(task)
+            if validation_error:
                 return Response(
-                    {"error": "Task is required"},
+                    {"error": validation_error},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            todos_collection.insert_one({"task": task})
+            todos_collection.insert_one({"task": task.strip()})
 
             return Response(
                 {"message": "Task created successfully", "task": task},
@@ -47,13 +65,15 @@ class TodoListView(APIView):
             )
 
         except errors.PyMongoError as db_error:
+            logger.error(f"Mongo Write Error: {db_error}")
             return Response(
-                {"error": "Database write error", "details": str(db_error)},
+                {"error": "Database write error"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
         except Exception as e:
+            logger.exception("Unexpected POST error")
             return Response(
-                {"error": "Unexpected server error", "details": str(e)},
+                {"error": "Internal server error"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )    
+            )
