@@ -1,5 +1,8 @@
 # set base image (host OS)
-FROM python:3.8
+FROM python:3.8-buster
+
+RUN sed -i 's|deb.debian.org|archive.debian.org|g' /etc/apt/sources.list && \
+    sed -i '/security/d' /etc/apt/sources.list
 
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 
@@ -21,7 +24,7 @@ RUN apt-get install -y mongodb-org
 RUN apt-get install -y yarn
 
 # Install PIP
-RUN easy_install pip
+RUN apt-get install -y python3-pip
 
 
 ENV ENV_TYPE staging
